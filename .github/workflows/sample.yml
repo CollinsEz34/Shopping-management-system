@@ -1,16 +1,48 @@
 name: Docker Build and Push
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
 
 jobs:
-  run-shell-command:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
-      - name: string
-        run: echo "Hello world"
-      - name: Build Angular application
-        run: npm run build -- --configuration=production
-          run:|
-           node -v
-           npm -v
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/my-app:${{ github.sha }} .
+          docker tag ${{ secrets.DOCKER_USERNAME }}/my-app:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/my-app:latest
+
+      - name: Push Docker image to Docker Hub
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/my-app:${{ github.sha }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/my-app:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Install kubectl
+        run: |
+          curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Set up kubeconfig for Minikube
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 --decode > $HOME/.kube/config
+
+      - name: Deploy with ArgoCD
+        run: |
+          kubectl set image deployment/my-app my-app=${{ secrets.DOCKER_USERNAME }}/my-app:${{ github.sha }} -n my-namespace
+          kubectl rollout status deployment/my-app -n my-namespace
