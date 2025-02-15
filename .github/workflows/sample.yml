@@ -1,0 +1,16 @@
+name: Docker Build and Push
+
+on: [push]
+
+jobs:
+  run-shell-command:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: string
+        run: echo "Hello world"
+      - name: Build Angular application
+        run: npm run build -- --configuration=production
+          run:|
+           node -v
+           npm -v
